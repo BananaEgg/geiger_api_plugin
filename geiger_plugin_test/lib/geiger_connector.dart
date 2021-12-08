@@ -1,18 +1,11 @@
 import 'dart:convert';
 import 'dart:developer';
-
 import 'package:geiger_api/geiger_api.dart';
 import 'package:geiger_localstorage/geiger_localstorage.dart';
 
 class GeigerConnector {
   late GeigerApi? geigerApi;
   late StorageController? storageController;
-
-
-
-
-
-
 
   Future<void> initGeigerAPI() async {
     try {
@@ -32,38 +25,82 @@ class GeigerConnector {
     } catch (e) {
       log('Failed to get the GeigerAPI');
       log(e.toString());
+    } finally {
+      try {
+        await addNodeToRoot('Chatbot');
+        await addChildPath(':Chatbot', 'reports');
+        await testNodeCreation(':Chatbot:reports');
+      } catch (e) {
+        print("Error adding Storage Node path: " + e.toString());
+      } finally {
+        await insertDummyData();
+        List? t = await getNodeValues(':Chatbot:reports');
+        print(t);
+      }
     }
-
-    await addChildPath(':', 'Chatbot');
-    // await addChildPath(':Chatbot', 'reports');
-    // await insertDummyData();
   }
 
   Future insertDummyData() async {
-    Map data = {
-      "type": "URL",
-      "address": "badguy@gmail.com",
-      "sensor": "kaspersky"
-    };
-    try {
-      await writeToGeigerStorage(data, 'report01', ':Chatbot:reports');
-    } catch (e) {
-      print("Error adding Storage Data: " + e.toString());
+    List data = [
+      {
+        'key': "aaa",
+        'val': {"type": "URL", "content": "badguy@gmail.com", "sensor": "GGX"}
+      },
+      {
+        'key': "bbb",
+        'val': {
+          "type": "application",
+          "content": "badguy@gmail.com",
+          "sensor": "kaspersky"
+        }
+      },
+      {
+        'key': "ccc",
+        'val': {"type": "file", "content": "virus.fx", "sensor": "QQW"}
+      },
+      {
+        'key': "ddd",
+        'val': {
+          "type": "URL",
+          "content": "bad@gmail.com",
+          "sensor": "kaspersky"
+        }
+      }
+    ];
+    for (var item in data) {
+      try {
+        await writeToGeigerStorage(
+            item['val'], item['key'], ':Chatbot:reports');
+      } catch (e) {
+        log(e.toString());
+
+        print("Error adding Storage Data: " + e.toString());
+      }
     }
 
     try {
-      Map? data =
-          await readDataFromGeigerStorage('report01', ':Chatbot:reports');
+      Map? data = await readDataFromGeigerStorage("ccc", ':Chatbot:reports');
       print(data);
     } catch (e) {
       print("Error retriving Storage Data: " + e.toString());
     }
+  }
 
+  Future testNodeCreation(String nodePath) async {
+    log('Testing node creation ' + nodePath);
     try {
-      List? data = await getNodeValues(':Chatbot:reports');
-      print(data);
+      log('Found the data node - Going to write the data');
+      Node node = await storageController!.get(nodePath);
+
+      node.addOrUpdateValue(NodeValueImpl('test', jsonEncode('test-data')));
+      await storageController!.update(node);
     } catch (e) {
-      print("Error retriving Storage Data: " + e.toString());
+      log(e.toString());
+      log('Cannot find node ' + nodePath);
+
+      // Node node = NodeImpl(nodePath, '');
+      // await node.addOrUpdateValue(NodeValueImpl(key, jsonEncode(data)));
+      // await storageController!.addOrUpdate(node);
     }
   }
 
@@ -74,14 +111,18 @@ class GeigerConnector {
       Node node = await storageController!.get(nodePath);
 
       node.addOrUpdateValue(NodeValueImpl(key, jsonEncode(data)));
-      await storageController!.update(node);
+      await storageController!.addOrUpdate(node);
     } catch (e) {
       log(e.toString());
-      log('Cannot find the data node - Going to create a new one');
+      log('Cannot find the data node ' +
+          nodePath +
+          ', key: ' +
+          key +
+          ' - Going to create a new one');
 
       Node node = NodeImpl(nodePath, '');
-      await node.addValue(NodeValueImpl(key, jsonEncode(data)));
-      await storageController!.add(node);
+      await node.addOrUpdateValue(NodeValueImpl(key, jsonEncode(data)));
+      await storageController!.addOrUpdate(node);
     }
   }
 
@@ -103,32 +144,42 @@ class GeigerConnector {
     return null;
   }
 
+  Future addNodeToRoot(String chaild) async {
+    try {
+      Node rootNode = await storageController!.get(':');
+
+      Node childNode = NodeImpl(chaild, '');
+
+      await rootNode.addChild(childNode);
+      //update node
+      await storageController!.addOrUpdate(rootNode);
+    } catch (e) {
+      log(e.toString());
+    }
+  }
+
   Future addChildPath(String parent, String chaild) async {
     try {
       Node node = await storageController!.get(parent);
-      String path = parent + ':' + chaild;
-      Node childNode = NodeImpl(path, '');
-
+      Node childNode = NodeImpl(chaild, '');
       await node.addChild(childNode);
-      //update node
       await storageController!.addOrUpdate(node);
     } catch (e) {
-      log("Error adding chaild to " + parent + ' , ' + e.toString());
+      log(e.toString());
     }
   }
 
   Future<List?> getNodeValues(String nodePath) async {
-    log('Trying to get the data node');
     try {
-      log('Found the data node - Going to get the data');
       Node node = await storageController!.get(nodePath);
-      List t = [];
-      Map nodeVals = await node.getValues();
-      nodeVals.forEach((key, value) {
-        return t.add({'key': key, 'val': jsonDecode(value)});
-      });
-      if (t.isNotEmpty) {
-        return t;
+      Map<String, NodeValue> nodeValues = await node.getValues();
+      Map<String, NodeValue> values = await node.getValues();
+
+      if (values.isNotEmpty) {
+        return values.entries
+            .map((entry) =>
+                {'key': entry.key, 'value': values[entry.key]!.value})
+            .toList();
       } else {
         log('Failed to retrieve the node value');
       }
