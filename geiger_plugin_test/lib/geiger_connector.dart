@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 import 'package:geiger_api/geiger_api.dart';
@@ -9,33 +10,36 @@ class GeigerConnector {
 
   Future<void> initGeigerAPI() async {
     try {
-      flushGeigerApiCache();
+      // flushGeigerApiCache();
       geigerApi = await getGeigerApi(
           '', GeigerApi.masterId, Declaration.doNotShareData);
       // geigerApi = await getGeigerApi(
       //     '', 'miCyberrangePlugin', Declaration.doNotShareData);
-      if (geigerApi != null) {
-        storageController = geigerApi!.getStorage();
-        if (storageController == null) {
-          log('Could not get the storageController');
-        }
-      } else {
-        log('Could not get the GeigerAPI');
-      }
     } catch (e) {
-      log('Failed to get the GeigerAPI');
-      log(e.toString());
+      print(e.toString());
     } finally {
       try {
-        await addNodeToRoot('Chatbot');
-        await addChildPath(':Chatbot', 'reports');
-        await testNodeCreation(':Chatbot:reports');
+        Timer(Duration(seconds: 1), () => print('done'));
+
+        storageController = geigerApi!.getStorage();
+
+        Timer(Duration(seconds: 1), () => print('done'));
       } catch (e) {
-        print("Error adding Storage Node path: " + e.toString());
+        log('Failed to get the GeigerAPI');
+        log(e.toString());
       } finally {
-        await insertDummyData();
-        List? t = await getNodeValues(':Chatbot:reports');
-        print(t);
+        try {
+          await addNodeToRoot('Chatbot');
+          await addChildPath(':Chatbot', 'reports');
+             await addChildPath(':Chatbot', 'sensor');
+          // await testNodeCreation(':Chatbot:sensor');
+        } catch (e) {
+          print("Error adding Storage Node path: " + e.toString());
+        } finally {
+          await insertDummyData();
+          List? t = await getNodeValues(':Chatbot:sensor');
+          print(t);
+        }
       }
     }
   }
@@ -44,33 +48,32 @@ class GeigerConnector {
     List data = [
       {
         'key': "aaa",
-        'val': {"type": "URL", "content": "badguy@gmail.com", "sensor": "GGX"}
+        'val': {"type": "URL", "value": "badguy@gmail.com", "sensor": "GGX"}
       },
       {
         'key': "bbb",
         'val': {
           "type": "application",
-          "content": "badguy@gmail.com",
+          "value": "badguy@gmail.com",
           "sensor": "kaspersky"
         }
       },
       {
         'key': "ccc",
-        'val': {"type": "file", "content": "virus.fx", "sensor": "QQW"}
+        'val': {"type": "file", "value": "virus.fx", "sensor": "QQW"}
       },
       {
         'key': "ddd",
         'val': {
           "type": "URL",
-          "content": "bad@gmail.com",
+          "value": "bad@gmail.com",
           "sensor": "kaspersky"
         }
       }
     ];
     for (var item in data) {
       try {
-        await writeToGeigerStorage(
-            item['val'], item['key'], ':Chatbot:reports');
+        await writeToGeigerStorage(item['val'], item['key'], ':Chatbot:sensor');
       } catch (e) {
         log(e.toString());
 
@@ -79,7 +82,7 @@ class GeigerConnector {
     }
 
     try {
-      Map? data = await readDataFromGeigerStorage("ccc", ':Chatbot:reports');
+      Map? data = await readDataFromGeigerStorage("ccc", ':Chatbot:sensor');
       print(data);
     } catch (e) {
       print("Error retriving Storage Data: " + e.toString());
@@ -177,8 +180,9 @@ class GeigerConnector {
 
       if (values.isNotEmpty) {
         return values.entries
-            .map((entry) =>
-                {'key': entry.key, 'value': values[entry.key]!.value})
+            .map((entry) => {
+                  entry.key : jsonDecode(values[entry.key]!.value)
+                })
             .toList();
       } else {
         log('Failed to retrieve the node value');
